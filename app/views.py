@@ -7,6 +7,22 @@ This file creates your application.
 
 from app import app
 from flask import render_template, request, redirect, url_for
+from flask import flash, session, abort, send_from_directory
+
+from app.pforms import PropertyForm
+from app import db
+from app.models import Property
+
+from werkzeug.utils import secure_filename
+
+import os
+import psycopg2
+
+
+def connect_db():
+    return psycopg2.connect(host="localhost",
+                            database="Properties", user="project1", password="Password")
+
 
 
 ###
@@ -43,6 +59,56 @@ def send_text_file(file_name):
     """Send your static text file."""
     file_dot_text = file_name + '.txt'
     return app.send_static_file(file_dot_text)
+
+
+@app.route('/property/', methods=['GET', 'POST'])
+def new_property():
+    property_form = PropertyForm()
+    if request.method == 'POST':
+        if property_form.validate_on_submit():
+
+            title = property_form.title.data
+            description = property_form.description.data
+            rooms = property_form.rooms.data
+            bathrooms = property_form.bathrooms.data
+            price = property_form.price.data
+            type = property_form.type.data
+            location = property_form.location.data
+
+            photo = property_form.photo.data
+            filename = secure_filename(photo.filename)
+            photo.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+            my_property = Property(title, description, rooms, bathrooms, price, type, location, filename)
+            db.session.add(my_property)
+            db.session.commit()
+
+            flash('New Property Added Successfully!', 'success')
+            return redirect(url_for('all_properties'))
+    else:
+        flash_errors(property_form)
+
+    return render_template('property.html', form=property_form)
+
+@app.route('/properties/')
+def all_properties():
+    properties = Property.query.all()
+
+    return render_template('properties.html', properties=properties)
+
+
+@app.route('/property/<property_id>')
+def individual_property(property_id):
+    property_id = int(property_id)
+    my_property = Property.query.filter_by(id=property_id).first()
+
+    return render_template('indi_property.html', property=my_property)
+
+@app.route('/uploads/<filename>')
+def get_uploaded_images(filename):
+    rootdir = os.getcwd()
+    return  send_from_directory(os.path.join(rootdir,app.config['UPLOAD_FOLDER']), filename)
+
 
 
 @app.after_request
